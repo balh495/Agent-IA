@@ -1,0 +1,15 @@
+version: '3.9'
+
+services:
+  ollama-chat:
+    build: .
+    container_name: ollama_chat
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./ollama_models:/root/.ollama
+      - ./chat_logs:/app/logs
+
+volumes:
+  ollama_models:
+  chat_logs:

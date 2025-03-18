@@ -7,6 +7,7 @@ services:
     ports:
       - "8501:8501"
     volumes:
+      - ./app:/app
       - ./ollama_models:/root/.ollama
       - ./chat_logs:/app/logs
 

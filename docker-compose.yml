@@ -10,7 +10,3 @@ services:
       - ./app:/app
       - ./ollama_models:/root/.ollama
       - ./chat_logs:/app/logs
-
-volumes:
-  ollama_models:
-  chat_logs:

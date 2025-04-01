@@ -65,7 +65,7 @@ class HistoryDatabase:
             print(f"Erreur lors de la récupération des conversations : {e}")
             return []
 
-    def create_conversation(self, name: str) -> int:
+    def create_conversation(self, name: str | None = None) -> int:
         """
         Crée une nouvelle conversation dans la base de données.
 
@@ -76,7 +76,10 @@ class HistoryDatabase:
             L'ID de la conversation créée
         """
         try:
-            self.cursor.execute("INSERT INTO conversations (name) VALUES (?)", (name,))
+            if name is None:
+                self.conn.execute("INSERT INTO conversations DEFAULT VALUES")
+            else:
+                self.cursor.execute("INSERT INTO conversations (name) VALUES (?)", (name,))
 
             self.conn.commit()
 
@@ -84,6 +87,44 @@ class HistoryDatabase:
         except sqlite3.Error as e:
             print(f"Erreur lors de la création de la conversation : {e}")
             return -1
+
+    def delete_conversation(self, convo_id: int) -> None:
+        """
+        Supprime une conversation spécifique et ses messages.
+
+        Args:
+            convo_id (int): L'ID de la conversation à supprimer
+        """
+        try:
+            self.conn.execute("DELETE FROM conversations WHERE id = ?", (convo_id,))
+            self.conn.commit()
+        except sqlite3.Error as e:
+            print(f"Erreur lors de la suppression de la conversation : {e}")
+
+    def delete_all_conversations(self) -> None:
+        """
+        Supprime toutes les conversations et leurs messages.
+
+        Cette méthode supprime toutes les entrées de la table des conversations,
+        ainsi que toutes les entrées associées dans la table des messages.
+
+        Raises:
+            sqlite3.Error: Si une erreur survient lors de la suppression.
+        """
+        try:
+            # Supprimer toutes les conversations de la base de données
+            self.conn.execute("DELETE FROM conversations")
+            self.conn.commit()
+        except sqlite3.Error as e:
+            # Afficher un message d'erreur si la suppression échoue
+            print(f"Erreur lors de la suppression de toutes les conversations : {e}")
+
+    def update_conversation_name(self, convo_id: int, new_name: str) -> None:
+        try:
+            self.cursor.execute("UPDATE conversations SET name = ? WHERE id = ?", (new_name, convo_id))
+            self.conn.commit()
+        except sqlite3.Error as e:
+            print(f"Erreur lors de la mise à jour du nom de la conversation : {e}")
 
     def save_message(self, conversation_id: int, role: str, content: str) -> None:
         """

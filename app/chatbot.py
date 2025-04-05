@@ -3,9 +3,41 @@ import ollama
 
 from database_history import HistoryDatabase
 
+def init_conversation():
+    st.session_state.conversation_id = history_db.create_conversation()
+    st.session_state.new_conversation = False
+
+    st.session_state.chat_history = []
+
+
+def get_conversation_history(conversation_list):
+    for convo_id, convo_name in conversation_list:
+        if convo_name is not None:
+            col1, col2 = st.sidebar.columns([3, 1])
+            with col1:
+                if st.sidebar.button(f"{convo_name}", key=f"convo_{convo_id}"):
+                    st.session_state.conversation_id = convo_id
+                    st.session_state.chat_history = [{"role": m[0], "content": m[1]} for m in history_db.get_messages(convo_id)]
+                    st.rerun()
+
+            with col2:
+                if st.button("❌", key=f"delete_{convo_id}"):
+                    history_db.delete_conversation(convo_id)
+                    st.write(f"Conversation {convo_name} supprimée")
+                    st.rerun()
+
+    st.sidebar.markdown("---")
+
+def get_chat_history():
+    if 'chat_history' in st.session_state.keys():
+        for message in st.session_state.chat_history:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+
+
 # En-tête de la page
-st.set_page_config(page_title="AI Chatbot Agent", layout="wide")
-st.title("AI Chatbot Agent")
+st.set_page_config(page_title="Agent Chatbot IA", layout="wide")
+st.title("Agent Chatbot IA")
 
 # Appliquer un style de lien à un bouton
 st.markdown("""
@@ -28,40 +60,34 @@ history_db.init_database()
 conversations = history_db.get_conversations()
 conversation_names = [convers_name for _, convers_name in conversations]
 
-# Bouton pour créer une nouvelle conversation
-new_convo_id = None
-if st.sidebar.button("Nouvelle conversation"):
-    new_convo_id = history_db.create_conversation()
-    st.session_state.conversation_id = new_convo_id
-    st.session_state.chat_history = []
+# Initialiser d'une nouvelle conversation
+if "conversation_id" not in st.session_state:
+    init_conversation()
 
+# Bouton pour créer une nouvelle conversation
+if st.sidebar.button("Nouvelle conversation"):
+    st.session_state.conversation_id = history_db.create_conversation()
+    st.session_state.chat_history = []
+    st.session_state.new_conversation = True
+
+    # Affichage de l'historique des messages
+    get_chat_history()
+
+new_conv_id = st.session_state.conversation_id
+
+# Supprimer l'ensemble des conversations
 if st.sidebar.button("Supprimer tout"):
     history_db.delete_all_conversations()
+    init_conversation()
     st.rerun()
 
-st.sidebar.markdown("---")
+# Afficher la liste des conversations dans la sidebar
+get_conversation_history(conversations)
 
-for convo_id, convo_name in conversations:
-    col1, col2 = st.sidebar.columns([3, 1])
-    with col1:
-        if st.sidebar.button(f"{convo_name}", key=f"convo_{convo_id}"):
-            st.session_state.conversation_id = convo_id
-            st.session_state.chat_history = [{"role": m[0], "content": m[1]} for m in history_db.get_messages(convo_id)]
-            st.rerun()
+# Affichage de l'historique des messages
+get_chat_history()
 
-    with col2:
-        if st.button("❌", key=f"delete_{convo_id}"):
-            history_db.delete_conversation(convo_id)
-            st.write(f"Conversation {convo_name} supprimée")
-            st.rerun()
-
-# Show chat history
-if 'chat_history' in st.session_state.keys():
-    for message in st.session_state.chat_history:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-
-# User prompt
+# Prompt utilisateur
 prompt = st.chat_input("Bonjour, comment puis-je vous aider : ")
 
 if prompt:
@@ -76,16 +102,13 @@ if prompt:
         full response. In case of an error, it displays an error message.
         """
         try:
-            # Prepare the message for the chatbot
+            # Formatage du message
             messages = [
                 {
                     "role": "system",
                     "content": (
-                        "Réponds directement à la question sans inclure ton raisonnement. "
-                        "Sois bref et précis. "
-                        "Réponds uniquement en français. "
-                        "Adopte un style académique. "
-                        "Évite toute faute d’orthographe."
+                        "Réponds directement, brièvement et précisément en français, avec un style académique et une précieuse rigueure sur l'orthographe."
+                        "Tu peux très bien ne pas répondre si tu n'es pas sûr de ta réponse"
                     )
                 },
                 {"role": "user", "content": prompt}
@@ -118,16 +141,16 @@ if prompt:
     with st.chat_message("assistant"):
         st.write_stream(generate_response())
 
-    if new_convo_id:
-        if len(history_db.get_messages(new_convo_id)) == 2:
-            conversation_name = prompt if len(prompt) <= 25 else prompt[:22] + "..."
-            history_db.update_conversation_name(new_convo_id, conversation_name)
+    if st.session_state.new_conversation:
+        if len(history_db.get_messages(new_conv_id)) <= 2:
+            conversation_name = prompt if len(prompt) <= 75 else prompt[:72] + "..."
+            history_db.update_conversation_name(new_conv_id, conversation_name)
+
+            st.session_state.new_conversation = False
             st.rerun()
     else:
-        new_convo_id = history_db.create_conversation()
-        st.session_state.conversation_id = new_convo_id
-        st.session_state.chat_history = []
+        if len(history_db.get_messages(new_conv_id)) <= 2:
+            conversation_name = prompt if len(prompt) <= 75 else prompt[:72] + "..."
+            history_db.update_conversation_name(new_conv_id, conversation_name)
 
-        conversation_name = prompt if len(prompt) <= 25 else prompt[:22] + "..."
-        history_db.update_conversation_name(new_convo_id, conversation_name)
-        st.rerun()
+            st.rerun()

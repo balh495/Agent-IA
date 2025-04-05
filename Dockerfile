@@ -25,4 +25,4 @@ COPY ./app /app/
 
 EXPOSE 8501
 
-CMD ollama serve & sleep 5 && ollama run llama3.2:3b && streamlit run chatbot.py --server.port=8501 --server.address=0.0.0.0 --server.runOnSave=True
+CMD ollama serve & sleep 3 && streamlit run chatbot.py --server.port=8501 --server.address=0.0.0.0 --server.runOnSave=True

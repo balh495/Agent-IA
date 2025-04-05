@@ -77,7 +77,7 @@ class HistoryDatabase:
         """
         try:
             if name is None:
-                self.conn.execute("INSERT INTO conversations DEFAULT VALUES")
+                self.cursor.execute("INSERT INTO conversations DEFAULT VALUES")
             else:
                 self.cursor.execute("INSERT INTO conversations (name) VALUES (?)", (name,))
 

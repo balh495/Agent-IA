@@ -171,3 +171,5 @@ cython_debug/
 .pypirc
 
 ollama_models/
+chat_logs/
+app/documents/

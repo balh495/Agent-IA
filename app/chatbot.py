@@ -1,7 +1,12 @@
 import streamlit as st
 import ollama
+import os
 
 from database_history import HistoryDatabase
+
+########################################################################################################################
+# Fonctions utiles
+########################################################################################################################
 
 def init_conversation():
     st.session_state.conversation_id = history_db.create_conversation()
@@ -34,6 +39,10 @@ def get_chat_history():
                 st.markdown(message["content"])
 
 
+########################################################################################################################
+# Page Streamlit - Initialisation
+########################################################################################################################
+
 # En-tête de la page
 st.set_page_config(page_title="Agent Chatbot IA", layout="wide")
 st.title("Agent Chatbot IA")
@@ -63,6 +72,13 @@ conversation_names = [convers_name for _, convers_name in conversations]
 if "conversation_id" not in st.session_state:
     init_conversation()
 
+########################################################################################################################
+# Sidebar
+########################################################################################################################
+########################################################################################################################
+# Historique des conversations
+########################################################################################################################
+
 # Bouton pour créer une nouvelle conversation
 if st.sidebar.button("Nouvelle conversation"):
     st.session_state.conversation_id = history_db.create_conversation()
@@ -84,6 +100,36 @@ get_conversation_history(conversations)
 
 # Affichage de l'historique des messages
 get_chat_history()
+
+########################################################################################################################
+# Gestion des documents
+########################################################################################################################
+os.makedirs("documents", exist_ok=True)
+os.makedirs("vectorstore", exist_ok=True)
+uploaded_files = st.sidebar.file_uploader("Ajouter un document", type=["pdf", "txt", "docx"], accept_multiple_files=True)
+
+if uploaded_files:
+    for file in uploaded_files:
+        with open(os.path.join("documents", file.name), "wb") as f:
+            f.write(file.getbuffer())
+    st.sidebar.success("Document(s) ajouté(s) avec succès.")
+
+st.sidebar.markdown("### 📚 Documents chargés")
+use_docs = st.sidebar.checkbox("Utiliser les documents dans la réponse", value=True)
+
+doc_list = os.listdir("documents")
+for doc in doc_list:
+    col1, col2 = st.sidebar.columns([3, 1])
+    with col1:
+        st.sidebar.markdown(f"- {doc}")
+    with col2:
+        if st.sidebar.button("❌", key=f"del_{doc}"):
+            os.remove(os.path.join("documents", doc))
+            st.rerun()
+
+########################################################################################################################
+# Chatbot
+########################################################################################################################
 
 # Prompt utilisateur
 prompt = st.chat_input("Bonjour, comment puis-je vous aider : ")
@@ -108,6 +154,9 @@ if prompt:
                         "Réponds de manière brève et concise, sans inclure de raisonnement."
                         "Réponds uniquement en français avec un soin rigoureux sur l'orthographe."
                         "Tu peux très bien ne pas répondre si tu n'es pas sûr de ta réponse, ne réponds que si tu si tu dispose de ses connaissances."
+                        "Tu peux répondre sur la base de tes connaissances si et seulement si tu en es certains."
+                        "Voici le contexte de la conversation (question de l'utilisateur):"
+                        "\n".join(history_db.get_message_by_role(new_conv_id, "user"))
                     )
                 },
                 {"role": "user", "content": prompt}
@@ -143,7 +192,7 @@ if prompt:
     # Attribution d'un titre à la conversation
     # if st.session_state.new_conversation:
     if history_db.get_conversation_name(new_conv_id) == "Nouvelle conversation" or history_db.get_conversation_name(new_conv_id) is None:
-        if history_db.get_message_count(new_conv_id) >= 2:
+        # if history_db.get_message_count(new_conv_id) >= 2:
 
             conv_title = ollama.chat(
                 model="llama3.2:3b",
@@ -151,13 +200,10 @@ if prompt:
                 {
                     "role": "system",
                     "content": (
-                        "Réponds de manière très brève et concise, sans inclure de raisonnement, en très très peu de mots."
-                        "Réponds uniquement en français avec un soin rigoureux sur l'orthographe."
-                        "Si le sujet ne renvoit qu'à des salutations ou des questions de bienvenue, ne fais rien et réponds : 'Nouvelle conversation'."
                         "\n".join(history_db.get_message_by_role(new_conv_id, "user"))
                     )
                 },
-                {"role": "user", "content": "Trouve moi un titre qui résume le sujet centrale des questions de l'utilisateur."}
+                {"role": "user", "content": "Your task is to generate only a short, affirmative title in French that describes the general topic of the user's request. Do not rephrase, answer, or complete the user's question. The title must not include facts, names, or conclusions, and must never be a question. Output a neutral and abstract description of the topic only."}
             ])
 
             history_db.update_conversation_name(new_conv_id, conv_title["message"]["content"])

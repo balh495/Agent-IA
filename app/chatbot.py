@@ -5,7 +5,7 @@ from database_history import HistoryDatabase
 
 def init_conversation():
     st.session_state.conversation_id = history_db.create_conversation()
-    st.session_state.new_conversation = False
+    st.session_state.new_conversation = True
 
     st.session_state.chat_history = []
 
@@ -23,7 +23,6 @@ def get_conversation_history(conversation_list):
             with col2:
                 if st.button("❌", key=f"delete_{convo_id}"):
                     history_db.delete_conversation(convo_id)
-                    st.write(f"Conversation {convo_name} supprimée")
                     st.rerun()
 
     st.sidebar.markdown("---")
@@ -68,10 +67,9 @@ if "conversation_id" not in st.session_state:
 if st.sidebar.button("Nouvelle conversation"):
     st.session_state.conversation_id = history_db.create_conversation()
     st.session_state.chat_history = []
-    st.session_state.new_conversation = True
 
     # Affichage de l'historique des messages
-    get_chat_history()
+    # get_chat_history()
 
 new_conv_id = st.session_state.conversation_id
 
@@ -107,8 +105,9 @@ if prompt:
                 {
                     "role": "system",
                     "content": (
-                        "Réponds directement, brièvement et précisément en français, avec un style académique et une précieuse rigueure sur l'orthographe."
-                        "Tu peux très bien ne pas répondre si tu n'es pas sûr de ta réponse"
+                        "Réponds de manière brève et concise, sans inclure de raisonnement."
+                        "Réponds uniquement en français avec un soin rigoureux sur l'orthographe."
+                        "Tu peux très bien ne pas répondre si tu n'es pas sûr de ta réponse, ne réponds que si tu si tu dispose de ses connaissances."
                     )
                 },
                 {"role": "user", "content": prompt}
@@ -141,16 +140,33 @@ if prompt:
     with st.chat_message("assistant"):
         st.write_stream(generate_response())
 
-    if st.session_state.new_conversation:
-        if len(history_db.get_messages(new_conv_id)) <= 2:
-            conversation_name = prompt if len(prompt) <= 75 else prompt[:72] + "..."
-            history_db.update_conversation_name(new_conv_id, conversation_name)
+    # Attribution d'un titre à la conversation
+    # if st.session_state.new_conversation:
+    if history_db.get_conversation_name(new_conv_id) == "Nouvelle conversation" or history_db.get_conversation_name(new_conv_id) is None:
+        if history_db.get_message_count(new_conv_id) >= 2:
+
+            conv_title = ollama.chat(
+                model="llama3.2:3b",
+                messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Réponds de manière très brève et concise, sans inclure de raisonnement, en très très peu de mots."
+                        "Réponds uniquement en français avec un soin rigoureux sur l'orthographe."
+                        "Si le sujet ne renvoit qu'à des salutations ou des questions de bienvenue, ne fais rien et réponds : 'Nouvelle conversation'."
+                        "\n".join(history_db.get_message_by_role(new_conv_id, "user"))
+                    )
+                },
+                {"role": "user", "content": "Trouve moi un titre qui résume le sujet centrale des questions de l'utilisateur."}
+            ])
+
+            history_db.update_conversation_name(new_conv_id, conv_title["message"]["content"])
 
             st.session_state.new_conversation = False
             st.rerun()
-    else:
-        if len(history_db.get_messages(new_conv_id)) <= 2:
-            conversation_name = prompt if len(prompt) <= 75 else prompt[:72] + "..."
-            history_db.update_conversation_name(new_conv_id, conversation_name)
-
-            st.rerun()
+    # else:
+    #     if len(history_db.get_messages(new_conv_id)) <= 2:
+    #         conversation_name = prompt if len(prompt) <= 75 else prompt[:72] + "..."
+    #         history_db.update_conversation_name(new_conv_id, conversation_name)
+    #
+    #         st.rerun()

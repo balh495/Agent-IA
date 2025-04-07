@@ -65,21 +65,20 @@ class HistoryDatabase:
             print(f"Erreur lors de la récupération des conversations : {e}")
             return []
 
-    def create_conversation(self, name: str | None = None) -> int:
+    def create_conversation(self, _name: str | None = None) -> int:
         """
         Crée une nouvelle conversation dans la base de données.
 
         Args:
-            name (str): Le nom de la conversation
+            _name (str): Le nom de la conversation
 
         Returns:
             L'ID de la conversation créée
         """
+
+        name = _name if _name is not None else "Nouvelle conversation"
         try:
-            if name is None:
-                self.cursor.execute("INSERT INTO conversations DEFAULT VALUES")
-            else:
-                self.cursor.execute("INSERT INTO conversations (name) VALUES (?)", (name,))
+            self.cursor.execute("INSERT INTO conversations (name) VALUES (?)", (name,))
 
             self.conn.commit()
 
@@ -126,6 +125,14 @@ class HistoryDatabase:
         except sqlite3.Error as e:
             print(f"Erreur lors de la mise à jour du nom de la conversation : {e}")
 
+    def get_conversation_name(self, convo_id: int) -> str | None:
+        try:
+            self.cursor.execute("SELECT name FROM conversations WHERE id = ?", (convo_id,))
+            return self.cursor.fetchone()[0]
+        except sqlite3.Error as e:
+            print(f"Erreur lors de la récupération du nom de la conversation : {e}")
+            return None
+
     def save_message(self, conversation_id: int, role: str, content: str) -> None:
         """
         Sauvegarde un message dans la base de données.
@@ -160,4 +167,20 @@ class HistoryDatabase:
             return self.cursor.fetchall()
         except sqlite3.Error as e:
             print(f"Erreur lors de la récupération des messages : {e}")
+            return []
+
+    def get_message_count(self, conversation_id: int) -> int:
+        try:
+            self.cursor.execute("SELECT COUNT(*) FROM messages WHERE conversation_id = ?", (conversation_id,))
+            return self.cursor.fetchone()[0]
+        except sqlite3.Error as e:
+            print(f"Erreur lors de la récupération du nombre de messages : {e}")
+            return -1
+
+    def get_message_by_role(self, conversation_id: int, role: str) -> list:
+        try:
+            self.cursor.execute("SELECT content FROM messages WHERE conversation_id = ? AND role = ?", (conversation_id, role))
+            return [message[0] for message in self.cursor.fetchall()]
+        except sqlite3.Error as e:
+            print(f"Erreur lors de la récupération des messages par rôle : {e}")
             return []

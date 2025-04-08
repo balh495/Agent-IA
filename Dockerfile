@@ -32,9 +32,6 @@ WORKDIR /app
 
 COPY ./app /app/
 
-RUN rm -rf ~/.cache/huggingface/transformers && \
-    rm -rf ~/.cache/sentence-transformers
-
 EXPOSE 8501
 
-CMD ollama serve & sleep 3 && streamlit run chatbot.py --server.port=8501 --server.address=0.0.0.0 --server.runOnSave=True
+CMD ollama serve & sleep 3 && ollama pull nomic-embed-text:latest && streamlit run chatbot.py --server.port=8501 --server.address=0.0.0.0 --server.runOnSave=True

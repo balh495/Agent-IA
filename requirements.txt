@@ -1,8 +1,9 @@
 streamlit
-langchain
-langchain-community
 chromadb
 pypdf
 python-docx
-docx2txt
+docx
 ollama
+pymupdf
+langchain
+langchain-community

@@ -19,7 +19,7 @@ def init_conversation():
 def get_conversation_history(conversation_list):
     for convo_id, convo_name in conversation_list:
         if convo_name is not None:
-            col1, col2 = st.sidebar.columns([3, 1])
+            col1, col2 = st.sidebar.columns([4, 1])
             with col1:
                 if st.sidebar.button(f"{convo_name}", key=f"convo_{convo_id}"):
                     st.session_state.conversation_id = convo_id
@@ -49,7 +49,7 @@ def delete_document_from_sidebar(doc_id):
         os.remove(doc_path)
 
     # Supprimer du vecteur store
-    rag_engine.delete_document(doc_id)
+    RAGEngine().delete_document(doc_id)
 
 
 ########################################################################################################################
@@ -81,10 +81,6 @@ history_db.init_database()
 conversations = history_db.get_conversations()
 conversation_names = [convers_name for _, convers_name in conversations]
 
-# Initialiser d'une nouvelle conversation
-if "conversation_id" not in st.session_state:
-    init_conversation()
-
 ########################################################################################################################
 # Sidebar
 ########################################################################################################################
@@ -97,15 +93,10 @@ if st.sidebar.button("Nouvelle conversation"):
     st.session_state.conversation_id = history_db.create_conversation()
     st.session_state.chat_history = []
 
-    # Affichage de l'historique des messages
-    # get_chat_history()
-
-new_conv_id = st.session_state.conversation_id
-
 # Supprimer l'ensemble des conversations
 if st.sidebar.button("Supprimer tout"):
     history_db.delete_all_conversations()
-    init_conversation()
+    # init_conversation()
     st.rerun()
 
 # Afficher la liste des conversations dans la sidebar
@@ -125,11 +116,10 @@ if uploaded_files:
     for file in uploaded_files:
         with open(os.path.join("documents", file.name), "wb") as f:
             f.write(file.getbuffer())
-    st.sidebar.success("Documents ajoutés. Index en cours...")
-    st.rerun()
+        st.sidebar.success(f"fichier '{file.name}' ajouté!")
 
 st.sidebar.markdown("### 📚 Documents chargés")
-use_docs = st.sidebar.checkbox("Utiliser les documents dans la réponse", value=True)
+use_docs = st.sidebar.checkbox("Utiliser les documents dans la réponse", value=False)
 
 doc_list = os.listdir("documents")
 for doc in doc_list:
@@ -144,9 +134,10 @@ for doc in doc_list:
             st.sidebar.success(f"Document '{doc}' supprimé du système.")
             st.rerun()
 
-if use_docs and len(doc_list) > 0:
-    rag_engine = RAGEngine()
-    rag_engine.rebuild_index()
+if use_docs:
+    # Initialiser le moteur de RAG
+    with st.spinner("Encodage des documents en cours...", show_time=True):
+        rag_engine = RAGEngine()
 
 ########################################################################################################################
 # Chatbot
@@ -156,10 +147,17 @@ if use_docs and len(doc_list) > 0:
 prompt = st.chat_input("Bonjour, comment puis-je vous aider : ")
 
 if prompt:
+
+    # Initialiser d'une nouvelle conversation
+    if "conversation_id" not in st.session_state and "new_conversation" not in st.session_state:
+        init_conversation()
+    else:
+        st.session_state.new_conversation = False
+
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    rag_chunks = rag_engine.retrieve(prompt, k=5) if use_docs else []
+    rag_chunks = rag_engine.retrieve(query=prompt, k=5) if use_docs else []
     rag_context = "\n".join(rag_chunks)
 
     def generate_response():
@@ -181,7 +179,7 @@ if prompt:
                         "Base toi sur le contexte que je te passe pour répondre. Si tu n'as pas la réponse dans mon contexte tu peux te baser sur tes connaissances fiables, dans quel cas tu dois le préciser que la réponse vient de toi et non de mon contexte"
                         "Voici un contexte extrait de documents pertinents sur lesquels tu dois te baser: \n" + rag_context + "\n" 
                         "Voici le contexte de la conversation (question de l'utilisateur):"
-                        "\n".join(history_db.get_message_by_role(new_conv_id, "user"))
+                        "\n".join(history_db.get_message_by_role(st.session_state.conversation_id, "user"))
                     )
                 },
                 {"role": "user", "content": prompt}
@@ -215,20 +213,20 @@ if prompt:
         st.write_stream(generate_response())
 
     # Attribution d'un titre à la conversation
-    if history_db.get_conversation_name(new_conv_id) == "Nouvelle conversation" or history_db.get_conversation_name(new_conv_id) is None:
-            conv_title = ollama.chat(
-                model="llama3.2:3b",
-                messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "\n".join(history_db.get_message_by_role(new_conv_id, "user"))
-                    )
-                },
-                {"role": "user", "content": "Your task is to generate only a short, affirmative title in French that describes the general topic of the user's request. Do not rephrase, answer, or complete the user's question. The title must not include facts, names, or conclusions, and must never be a question. Output a neutral and abstract description of the topic only."}
-            ])
+    if st.session_state.new_conversation:
+        conv_title = ollama.chat(
+            model="llama3.2:1b",
+            messages=[
+            {
+                "role": "system",
+                "content": (
+                    "\n".join(history_db.get_message_by_role(st.session_state.conversation_id, "user"))
+                )
+            },
+            {"role": "user", "content": "Your task is to generate only a short, affirmative title in French that describes the general topic of the user's request. Do not rephrase, answer, or complete the user's question. The title must not include facts, names, or conclusions, and must never be a question. Output a neutral and abstract description of the topic only."}
+        ])
 
-            history_db.update_conversation_name(new_conv_id, conv_title["message"]["content"])
+        history_db.update_conversation_name(st.session_state.conversation_id, conv_title["message"]["content"])
 
-            st.session_state.new_conversation = False
-            st.rerun()
+        st.session_state.new_conversation = False
+        st.rerun()

@@ -3,6 +3,7 @@ import ollama
 import os
 
 from database_history import HistoryDatabase
+from rag_engine import RAGEngine
 
 ########################################################################################################################
 # Fonctions utiles
@@ -37,6 +38,18 @@ def get_chat_history():
         for message in st.session_state.chat_history:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
+
+
+def delete_document_from_sidebar(doc_id):
+    """Supprime un document à la fois de la sidebar et du vecteur store."""
+    doc_path = os.path.join("documents", doc_id)
+
+    # Supprimer le fichier
+    if os.path.exists(doc_path):
+        os.remove(doc_path)
+
+    # Supprimer du vecteur store
+    rag_engine.delete_document(doc_id)
 
 
 ########################################################################################################################
@@ -112,7 +125,8 @@ if uploaded_files:
     for file in uploaded_files:
         with open(os.path.join("documents", file.name), "wb") as f:
             f.write(file.getbuffer())
-    st.sidebar.success("Document(s) ajouté(s) avec succès.")
+    st.sidebar.success("Documents ajoutés. Index en cours...")
+    st.rerun()
 
 st.sidebar.markdown("### 📚 Documents chargés")
 use_docs = st.sidebar.checkbox("Utiliser les documents dans la réponse", value=True)
@@ -121,11 +135,18 @@ doc_list = os.listdir("documents")
 for doc in doc_list:
     col1, col2 = st.sidebar.columns([3, 1])
     with col1:
-        st.sidebar.markdown(f"- {doc}")
+        if st.sidebar.button(f"{doc}", key=f"doc_{doc}"):
+            st.session_state.selected_doc = doc
+
     with col2:
-        if st.sidebar.button("❌", key=f"del_{doc}"):
-            os.remove(os.path.join("documents", doc))
+        if st.sidebar.button("❌", key=f"delete_{doc}"):
+            delete_document_from_sidebar(doc)
+            st.sidebar.success(f"Document '{doc}' supprimé du système.")
             st.rerun()
+
+if use_docs and len(doc_list) > 0:
+    rag_engine = RAGEngine()
+    rag_engine.rebuild_index()
 
 ########################################################################################################################
 # Chatbot
@@ -137,6 +158,9 @@ prompt = st.chat_input("Bonjour, comment puis-je vous aider : ")
 if prompt:
     with st.chat_message("user"):
         st.markdown(prompt)
+
+    rag_chunks = rag_engine.retrieve(prompt, k=5) if use_docs else []
+    rag_context = "\n".join(rag_chunks)
 
     def generate_response():
         """Generate a response from the chatbot model and update chat history.
@@ -154,7 +178,8 @@ if prompt:
                         "Réponds de manière brève et concise, sans inclure de raisonnement."
                         "Réponds uniquement en français avec un soin rigoureux sur l'orthographe."
                         "Tu peux très bien ne pas répondre si tu n'es pas sûr de ta réponse, ne réponds que si tu si tu dispose de ses connaissances."
-                        "Tu peux répondre sur la base de tes connaissances si et seulement si tu en es certains."
+                        "Base toi sur le contexte que je te passe pour répondre. Si tu n'as pas la réponse dans mon contexte tu peux te baser sur tes connaissances fiables, dans quel cas tu dois le préciser que la réponse vient de toi et non de mon contexte"
+                        "Voici un contexte extrait de documents pertinents sur lesquels tu dois te baser: \n" + rag_context + "\n" 
                         "Voici le contexte de la conversation (question de l'utilisateur):"
                         "\n".join(history_db.get_message_by_role(new_conv_id, "user"))
                     )
@@ -190,10 +215,7 @@ if prompt:
         st.write_stream(generate_response())
 
     # Attribution d'un titre à la conversation
-    # if st.session_state.new_conversation:
     if history_db.get_conversation_name(new_conv_id) == "Nouvelle conversation" or history_db.get_conversation_name(new_conv_id) is None:
-        # if history_db.get_message_count(new_conv_id) >= 2:
-
             conv_title = ollama.chat(
                 model="llama3.2:3b",
                 messages=[
@@ -210,9 +232,3 @@ if prompt:
 
             st.session_state.new_conversation = False
             st.rerun()
-    # else:
-    #     if len(history_db.get_messages(new_conv_id)) <= 2:
-    #         conversation_name = prompt if len(prompt) <= 75 else prompt[:72] + "..."
-    #         history_db.update_conversation_name(new_conv_id, conversation_name)
-    #
-    #         st.rerun()
